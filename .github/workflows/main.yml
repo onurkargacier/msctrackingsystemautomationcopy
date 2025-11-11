@@ -1,0 +1,77 @@
+name: MSC ETA Tracking Automation
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 5 * * 1'  # Her Pazartesi 08:00 TR
+
+jobs:
+  run-script:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+
+    # Aynı workflow’un üst üste binmesini engelle
+    concurrency:
+      group: msctracking-${{ github.ref }}
+      cancel-in-progress: false
+
+    env:
+      # Erişim kısıtı riski varsa 4–8 arası iyi
+      CONCURRENCY: "8"
+      # Event etiketlerini Log sheet’te görmek istersen 1 yap
+      DEBUG_EVENTS: "0"
+
+    steps:
+      - name: Reposu klonla
+        uses: actions/checkout@v4
+
+      - name: Python kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Preflight secrets check
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+        run: |
+          set -euo pipefail
+          : "${GOOGLE_CREDENTIALS:?GOOGLE_CREDENTIALS missing. Add it in Actions secrets.}"
+          : "${SPREADSHEET_ID:?SPREADSHEET_ID missing. Add it in Actions secrets.}"
+          echo "Secrets OK"
+
+      - name: credentials.json oluştur
+        env:
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+        run: |
+          set -euo pipefail
+          printf '%s' "${GOOGLE_CREDENTIALS}" > credentials.json
+
+      - name: Sistem bağımlılıklarını kur
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libglib2.0-0 libnss3 libatk-bridge2.0-0 libcups2 libxss1 \
+            libgbm1 libgtk-3-0 libasound2 libx11-6 libxcb1 libxcomposite1 \
+            libxdamage1 libxfixes3 libxrandr2 libdbus-1-3 libxkbcommon0 \
+            libatspi2.0-0 libdrm2 libpango-1.0-0 libcairo2 ca-certificates \
+            fonts-liberation curl unzip
+          sudo rm -rf /var/lib/apt/lists/*
+
+      - name: Python bağımlılıklarını kur
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Scripti çalıştır
+        env:
+          SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+          CONCURRENCY: ${{ env.CONCURRENCY }}
+          DEBUG_EVENTS: ${{ env.DEBUG_EVENTS }}
+        run: |
+          set -euo pipefail
+          python src/main.py
