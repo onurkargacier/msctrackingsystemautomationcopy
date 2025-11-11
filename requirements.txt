@@ -1,0 +1,8 @@
+playwright # Web scraping ve otomasyon
+# Google Sheets entegrasyonu
+gspread
+gspread-formatting
+google-auth
+google-auth-httplib2
+requests
+pytz
